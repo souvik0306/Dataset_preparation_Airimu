@@ -1,0 +1,41 @@
+Here is the comprehensive technical overview of the Data Processing Pipeline for evaluating state estimation performance using a ROS Bag containing flight controller estimates (local_position/velocity) and ground truth data from a motion capture system (vicon/velocity).
+
+This structure is formatted using formal engineering terminology suitable for the Experimental Setup or Data Methodology section of a robotics thesis or technical report.
+
+Data Processing Pipeline Architecture
+
+[1. Raw Data Extraction]
+    Extract two independent, unprocessed DataFrames from the ROS Bag
+           ├── df_ekf (50Hz)
+           └── df_vicon_raw (100Hz)
+                         │
+                         ▼
+             [2. Signal Cleaning (Pre-Sync)]
+    Perform physical pruning and sliding median filtering strictly on 
+    df_vicon_raw, followed by linear interpolation, to output the 
+    pure df_vicon_clean (100Hz).
+                         │
+                         ▼
+            [3. Transport Latency Compensation]
+    Shift the entire system timeline of df_vicon_clean forward 
+    (e.g., -25ms) to eliminate the constant lag induced by Wi-Fi 
+    and serial communications.
+                         │
+                         ▼
+               [4. Data Sync (Alignment)]
+    Use pd.merge_asof with the 50Hz df_ekf timestamps as the absolute 
+    base index to scan, pair, and downsample the 100Hz df_vicon_clean, 
+    generating df_sync (50Hz).
+                         │
+                         ▼
+        [5. Window Slicing & Divergence Analysis]
+    - Automatically pinpoint the physical liftoff origin (T_lift) 
+      using the condition vz_vicon > 0.3 m/s.
+    - Deterministically crop out a 15-second evaluation window spanning 
+      [T_lift + 7s, T_lift + 22s].
+    - Execute Initial Velocity Bias Zeroing.
+                         │
+                         ▼
+                  [6. Metrics Output]
+    Compute velocity RMSE and integrate the residuals over time to plot 
+    the Cumulative Position Drift Curves (Drift Metrics).
